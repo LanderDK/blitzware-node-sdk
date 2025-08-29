@@ -15,11 +15,13 @@ Build a secure server‑rendered web app using BlitzWare OAuth 2.0 Authorization
 ### Install Dependencies
 
 **Express.js:**
+
 ```bash
 npm install blitzware-node-sdk express express-session dotenv
 ```
 
 **Koa.js:**
+
 ```bash
 npm install blitzware-node-sdk koa koa-router koa-session koa-bodyparser dotenv
 ```
@@ -42,81 +44,94 @@ The BlitzWare SDK provides middleware that automatically creates authentication 
 ### Express.js Example
 
 ```javascript
-const express = require('express');
-const session = require('express-session');
-const { expressAuth, expressRequiresAuth } = require('blitzware-node-sdk');
-require('dotenv').config();
+const express = require("express");
+const session = require("express-session");
+const { expressAuth, expressRequiresAuth } = require("blitzware-node-sdk");
+require("dotenv").config();
 
 const app = express();
 
 // Session middleware
-app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: false } // set true with HTTPS in production
-}));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false }, // set true with HTTPS in production
+  })
+);
 
 // BlitzWare authentication - automatically creates /login, /logout, /callback routes
-app.use(expressAuth({
-  clientId: process.env.BLITZWARE_CLIENT_ID,
-  clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
-  redirectUri: process.env.BLITZWARE_REDIRECT_URI,
-  scopes: ['openid', 'profile', 'email']
-}));
+app.use(
+  expressAuth({
+    clientId: process.env.BLITZWARE_CLIENT_ID,
+    clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
+    redirectUri: process.env.BLITZWARE_REDIRECT_URI,
+    scopes: ["openid", "profile", "email"],
+  })
+);
 
 // Public route
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
   if (req.session.user) {
-    res.send(`<h1>Welcome, ${req.session.user.name}!</h1><a href="/logout">Logout</a>`);
+    res.send(
+      `<h1>Welcome, ${req.session.user.name}!</h1><a href="/logout">Logout</a>`
+    );
   } else {
     res.send(`<h1>BlitzWare Express</h1><a href="/login">Login</a>`);
   }
 });
 
 // Protected route
-app.get('/profile', expressRequiresAuth(), (req, res) => {
+app.get("/profile", expressRequiresAuth(), (req, res) => {
   res.json({
-    message: 'This is a protected route',
-    user: req.session.user
+    message: "This is a protected route",
+    user: req.session.user,
   });
 });
 
 app.listen(3000, () => {
-  console.log('Express app running on http://localhost:3000');
+  console.log("Express app running on http://localhost:3000");
 });
 ```
 
 ### Koa.js Example
 
 ```javascript
-const Koa = require('koa');
-const session = require('koa-session');
-const { koaAuth, koaRequiresAuth } = require('blitzware-node-sdk');
-require('dotenv').config();
+const Koa = require("koa");
+const session = require("koa-session");
+const { koaAuth, koaRequiresAuth } = require("blitzware-node-sdk");
+require("dotenv").config();
 
 const app = new Koa();
 
 // Session configuration
 app.keys = [process.env.SESSION_SECRET];
-app.use(session({
-  key: 'koa.sess',
-  maxAge: 86400000, // 24 hours
-  httpOnly: true,
-  signed: true
-}, app));
+app.use(
+  session(
+    {
+      key: "koa.sess",
+      maxAge: 86400000, // 24 hours
+      httpOnly: true,
+      signed: true,
+    },
+    app
+  )
+);
 
 // BlitzWare authentication - automatically handles /login, /logout, /callback routes
-app.use(koaAuth({
-  clientId: process.env.BLITZWARE_CLIENT_ID,
-  clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
-  redirectUri: process.env.BLITZWARE_REDIRECT_URI,
-  scopes: ['openid', 'profile', 'email']
-}));
+app.use(
+  koaAuth({
+    clientId: process.env.BLITZWARE_CLIENT_ID,
+    clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
+    redirectUri: process.env.BLITZWARE_REDIRECT_URI,
+    scopes: ["openid", "profile", "email"],
+  })
+);
 
 // Public route
 app.use(async (ctx, next) => {
-  if (ctx.path === '/') {
+  if (ctx.path === "/") {
     if (ctx.session.user) {
       ctx.body = `<h1>Welcome, ${ctx.session.user.name}!</h1><a href="/logout">Logout</a>`;
     } else {
@@ -130,10 +145,10 @@ app.use(async (ctx, next) => {
 // Protected route
 app.use(koaRequiresAuth());
 app.use(async (ctx, next) => {
-  if (ctx.path === '/profile') {
+  if (ctx.path === "/profile") {
     ctx.body = {
-      message: 'This is a protected route',
-      user: ctx.session.user
+      message: "This is a protected route",
+      user: ctx.session.user,
     };
     return;
   }
@@ -141,66 +156,38 @@ app.use(async (ctx, next) => {
 });
 
 app.listen(3001, () => {
-  console.log('Koa app running on http://localhost:3001');
+  console.log("Koa app running on http://localhost:3001");
 });
 ```
-
-## 🏗️ Advanced Examples
-
-The SDK includes comprehensive multi-file examples demonstrating production-ready patterns:
-
-### Run Examples
-
-```bash
-# Simple examples (single file)
-npm run example:express     # Express basic example
-npm run example:koa        # Koa basic example
-
-# Advanced examples (multi-file projects)
-npm run example:express-advanced     # Express with routing, middleware, templates
-npm run example:koa-advanced        # Koa with routing, middleware, templates
-
-# Development mode with auto-restart
-npm run example:express-advanced-dev
-npm run example:koa-advanced-dev
-```
-
-### Advanced Example Features
-
-- **Modular Architecture**: Separate route files and middleware
-- **Role-based Access Control**: Admin and user roles with permission checks
-- **Template Engine**: EJS templates with responsive design
-- **API Endpoints**: RESTful JSON API with authentication
-- **Error Handling**: Comprehensive error middleware
-- **Request Logging**: Detailed request/response logging
-- **Session Security**: Secure server-side session management
 
 ## 📚 API Reference
 
 ### Authentication Middleware
 
 #### Express
+
 ```javascript
-const { expressAuth, expressRequiresAuth } = require('blitzware-node-sdk');
+const { expressAuth, expressRequiresAuth } = require("blitzware-node-sdk");
 
 // Setup authentication (creates /login, /logout, /callback routes)
 app.use(expressAuth(config));
 
 // Protect routes
-app.get('/protected', expressRequiresAuth(), (req, res) => {
+app.get("/protected", expressRequiresAuth(), (req, res) => {
   // req.session.user is available
 });
 ```
 
 #### Koa
+
 ```javascript
-const { koaAuth, koaRequiresAuth } = require('blitzware-node-sdk');
+const { koaAuth, koaRequiresAuth } = require("blitzware-node-sdk");
 
 // Setup authentication (handles /login, /logout, /callback routes)
 app.use(koaAuth(config));
 
 // Protect routes
-app.use('/protected', koaRequiresAuth(), async (ctx) => {
+app.use("/protected", koaRequiresAuth(), async (ctx) => {
   // ctx.session.user is available
 });
 ```
@@ -209,11 +196,11 @@ app.use('/protected', koaRequiresAuth(), async (ctx) => {
 
 ```typescript
 interface AuthConfig {
-  clientId: string;         // OAuth client ID
-  clientSecret: string;     // OAuth client secret
-  redirectUri: string;      // OAuth redirect URI
-  scopes?: string[];        // OAuth scopes (default: ['openid', 'profile', 'email'])
-  baseUrl?: string;         // Override auth server URL
+  clientId: string; // OAuth client ID
+  clientSecret: string; // OAuth client secret
+  redirectUri: string; // OAuth redirect URI
+  scopes?: string[]; // OAuth scopes (default: ['openid', 'profile', 'email'])
+  baseUrl?: string; // Override auth server URL
 }
 ```
 
@@ -222,7 +209,7 @@ interface AuthConfig {
 When you use `expressAuth()` or `koaAuth()`, the following routes are automatically created:
 
 - `GET /login` - Initiates OAuth login flow
-- `GET /logout` - Logs out user and clears session  
+- `GET /logout` - Logs out user and clears session
 - `GET /callback` - OAuth callback handler
 
 ### Session Data
@@ -233,7 +220,7 @@ After successful authentication, user data is available in the session:
 // Express
 req.session.user = {
   id: "user-id",
-  name: "User Name", 
+  name: "User Name",
   email: "user@example.com",
   roles: ["user", "admin"], // if applicable
   // ... other user properties
@@ -243,16 +230,8 @@ req.session.user = {
 ctx.session.user = {
   id: "user-id",
   name: "User Name",
-  email: "user@example.com", 
+  email: "user@example.com",
   roles: ["user", "admin"], // if applicable
   // ... other user properties
 };
 ```
-
-## �️ Security Features
-
-- **PKCE (Proof Key for Code Exchange)**: Automatically implemented for enhanced security
-- **State Parameter**: CSRF protection for OAuth flows
-- **Secure Sessions**: Server-side session management
-- **Token Validation**: Optional token validation on each request
-- **Front-channel Logout**: Proper logout handling to clear auth server sessions
