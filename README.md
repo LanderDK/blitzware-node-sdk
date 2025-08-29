@@ -12,226 +12,271 @@ Build a secure server‑rendered web app using BlitzWare OAuth 2.0 Authorization
 - Node.js 18+
 - HTTPS in production
 
-### Install Dependencies
+### 1) Configure BlitzWare
 
-**Express.js:**
+Get your application keys from the BlitzWare dashboard. You will need:
+
+- Client ID
+- Client Secret
+- A Redirect URI added to your application's Redirect URIs list (under Security)
+
+If the redirect URI is not configured, authentication will fail.
+
+### 2) Install the BlitzWare Node SDK
+
+Run this in your project directory:
 
 ```bash
 npm install blitzware-node-sdk express express-session dotenv
+# or
+# yarn add blitzware-node-sdk express express-session dotenv
 ```
 
-**Koa.js:**
+### 3) Configure environment
 
-```bash
-npm install blitzware-node-sdk koa koa-router koa-session koa-bodyparser dotenv
+Create a `.env` file with your credentials:
+
 ```
-
-### Environment Configuration
-
-Create a `.env` file:
-
-```env
 BLITZWARE_CLIENT_ID=your-client-id
 BLITZWARE_CLIENT_SECRET=your-client-secret
 BLITZWARE_REDIRECT_URI=http://localhost:3000/callback
 SESSION_SECRET=replace-with-a-strong-secret
+# Optional: override auth base (self-hosted/staging)
+# BLITZWARE_BASE_URL=https://auth.blitzware.xyz/api/auth
 ```
 
-## 🎯 Middleware (Recommended)
+## 4) Express setup
 
-The BlitzWare SDK provides middleware that automatically creates authentication routes and handles the complete OAuth flow.
+Create `server.js` (or `app.js`):
 
-### Express.js Example
-
-```javascript
+```js
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const express = require("express");
 const session = require("express-session");
-const { expressAuth, expressRequiresAuth } = require("blitzware-node-sdk");
-require("dotenv").config();
+const { expressAuth, expressRequiresAuth } = require("../dist");
 
 const app = express();
+const port = process.env.PORT || 3000;
 
-// Session middleware
+// BlitzWare configuration
+const config = {
+  authRequired: false, // Don't require auth for all routes
+  clientId: process.env.BLITZWARE_CLIENT_ID || "your-client-id",
+  clientSecret: process.env.BLITZWARE_CLIENT_SECRET || "your-client-secret",
+  redirectUri:
+    process.env.BLITZWARE_REDIRECT_URI || `http://localhost:${port}/callback`,
+  secret: process.env.SESSION_SECRET || "LONG_RANDOM_STRING",
+  // baseUrl: process.env.BLITZWARE_BASE_URL, // Optional: custom auth server
+};
+
+// Session middleware (required for auth middleware)
 app.use(
   session({
-    secret: process.env.SESSION_SECRET,
+    secret: config.secret,
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }, // set true with HTTPS in production
   })
 );
 
-// BlitzWare authentication - automatically creates /login, /logout, /callback routes
-app.use(
-  expressAuth({
-    clientId: process.env.BLITZWARE_CLIENT_ID,
-    clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
-    redirectUri: process.env.BLITZWARE_REDIRECT_URI,
-    scopes: ["openid", "profile", "email"],
-  })
-);
+// Parse JSON bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Public route
-app.get("/", (req, res) => {
-  if (req.session.user) {
-    res.send(
-      `<h1>Welcome, ${req.session.user.name}!</h1><a href="/logout">Logout</a>`
-    );
-  } else {
-    res.send(`<h1>BlitzWare Express</h1><a href="/login">Login</a>`);
-  }
-});
-
-// Protected route
-app.get("/profile", expressRequiresAuth(), (req, res) => {
-  res.json({
-    message: "This is a protected route",
-    user: req.session.user,
-  });
-});
-
-app.listen(3000, () => {
-  console.log("Express app running on http://localhost:3000");
-});
-```
-
-### Koa.js Example
-
-```javascript
-const Koa = require("koa");
-const session = require("koa-session");
-const { koaAuth, koaRequiresAuth } = require("blitzware-node-sdk");
-require("dotenv").config();
-
-const app = new Koa();
-
-// Session configuration
-app.keys = [process.env.SESSION_SECRET];
-app.use(
-  session(
-    {
-      key: "koa.sess",
-      maxAge: 86400000, // 24 hours
-      httpOnly: true,
-      signed: true,
-    },
-    app
-  )
-);
-
-// BlitzWare authentication - automatically handles /login, /logout, /callback routes
-app.use(
-  koaAuth({
-    clientId: process.env.BLITZWARE_CLIENT_ID,
-    clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
-    redirectUri: process.env.BLITZWARE_REDIRECT_URI,
-    scopes: ["openid", "profile", "email"],
-  })
-);
-
-// Public route
-app.use(async (ctx, next) => {
-  if (ctx.path === "/") {
-    if (ctx.session.user) {
-      ctx.body = `<h1>Welcome, ${ctx.session.user.name}!</h1><a href="/logout">Logout</a>`;
-    } else {
-      ctx.body = `<h1>BlitzWare Koa</h1><a href="/login">Login</a>`;
-    }
-    return;
-  }
-  await next();
-});
-
-// Protected route
-app.use(koaRequiresAuth());
-app.use(async (ctx, next) => {
-  if (ctx.path === "/profile") {
-    ctx.body = {
-      message: "This is a protected route",
-      user: ctx.session.user,
-    };
-    return;
-  }
-  await next();
-});
-
-app.listen(3001, () => {
-  console.log("Koa app running on http://localhost:3001");
-});
-```
-
-## 📚 API Reference
-
-### Authentication Middleware
-
-#### Express
-
-```javascript
-const { expressAuth, expressRequiresAuth } = require("blitzware-node-sdk");
-
-// Setup authentication (creates /login, /logout, /callback routes)
+// BlitzWare auth router attaches /login, /logout, and /callback routes
 app.use(expressAuth(config));
 
-// Protect routes
-app.get("/protected", expressRequiresAuth(), (req, res) => {
-  // req.session.user is available
+// Home route - req.session.user is provided from the auth router
+app.get("/", (req, res) => {
+  res.send(`
+    <html>
+      <head><title>BlitzWare Express Example</title></head>
+      <body>
+        <h1>BlitzWare Express Example</h1>
+        ${
+          req.session.user
+            ? `
+            <p>✅ <strong>Logged in as ${req.session.user.username}</strong></p>
+            <p><a href="/profile">View Profile</a></p>
+            <p><a href="/logout">Logout</a></p>
+          `
+            : `
+            <p>❌ Not logged in</p>
+            <p><a href="/login">Login</a></p>
+          `
+        }
+      </body>
+    </html>
+  `);
 });
+
+// Protected profile route - expressRequiresAuth() middleware
+app.get("/profile", expressRequiresAuth(), (req, res) => {
+  res.send(`
+    <html>
+      <head><title>Profile</title></head>
+      <body>
+        <h1>Profile</h1>
+        <pre>${JSON.stringify(req.session.user, null, 2)}</pre>
+        <p><a href="/">← Back to Home</a></p>
+      </body>
+    </html>
+  `);
+});
+
+app.listen(port, () => {
+  console.log(`
+🚀 BlitzWare Express Example running at http://localhost:${port}
+
+🔗 Routes:
+   • GET /         - Home page
+   • GET /profile  - Protected profile page  
+   • GET /login    - Login (automatic)
+   • GET /logout   - Logout (automatic)
+
+📝 Setup:
+   1. Set BLITZWARE_CLIENT_ID and BLITZWARE_CLIENT_SECRET in .env
+   2. Visit http://localhost:${port}/login to authenticate
+  `);
+});
+
+module.exports = app;
 ```
 
-#### Koa
+Run:
 
-```javascript
-const { koaAuth, koaRequiresAuth } = require("blitzware-node-sdk");
+```bash
+node server.js
+```
 
-// Setup authentication (handles /login, /logout, /callback routes)
+Then visit `http://localhost:3000`.
+
+## 5) Koa setup
+
+Create a Koa app (example):
+
+```js
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
+const Koa = require("koa");
+const Router = require("@koa/router");
+const KoaSession = require("koa-session");
+const session = KoaSession && KoaSession.default ? KoaSession.default : KoaSession;
+const bodyParser = require("koa-bodyparser");
+const { koaAuth, koaRequiresAuth } = require("../dist");
+
+const app = new Koa();
+const router = new Router();
+const port = process.env.PORT || 3001;
+
+// BlitzWare configuration
+const config = {
+  authRequired: false, // Don't require auth for all routes
+  clientId: process.env.BLITZWARE_CLIENT_ID || "your-client-id",
+  clientSecret: process.env.BLITZWARE_CLIENT_SECRET || "your-client-secret",
+  redirectUri:
+    process.env.BLITZWARE_REDIRECT_URI || `http://localhost:${port}/callback`,
+  secret: process.env.SESSION_SECRET || "LONG_RANDOM_STRING",
+  // baseUrl: process.env.BLITZWARE_BASE_URL, // Optional: custom auth server
+};
+
+// Koa requires signing keys for sessions
+app.keys = [config.secret];
+
+// Session middleware
+app.use(session(app));
+
+app.use(bodyParser());
+
+// BlitzWare auth router attaches /login, /logout, and /callback routes
 app.use(koaAuth(config));
 
-// Protect routes
-app.use("/protected", koaRequiresAuth(), async (ctx) => {
-  // ctx.session.user is available
+// Home route - ctx.session.user is provided from the auth router
+router.get("/", async (ctx) => {
+  ctx.type = "html";
+  ctx.body = `
+    <html>
+      <head><title>BlitzWare Koa Example</title></head>
+      <body>
+        <h1>BlitzWare Koa Example</h1>
+        ${
+          ctx.session.user
+            ? `
+            <p>✅ <strong>Logged in as ${ctx.session.user.username}</strong></p>
+            <p><a href="/profile">View Profile</a></p>
+            <p><a href="/logout">Logout</a></p>
+          `
+            : `
+            <p>❌ Not logged in</p>
+            <p><a href="/login">Login</a></p>
+          `
+        }
+      </body>
+    </html>
+  `;
+});
+
+// Protected profile route - koaRequiresAuth() middleware
+router.get("/profile", koaRequiresAuth(), async (ctx) => {
+  ctx.type = "html";
+  ctx.body = `
+    <html>
+      <head><title>Profile</title></head>
+      <body>
+        <h1>Profile</h1>
+        <pre>${JSON.stringify(ctx.session.user, null, 2)}</pre>
+        <p><a href="/">← Back to Home</a></p>
+      </body>
+    </html>
+  `;
+});
+
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.listen(port, () => {
+  console.log(`
+🚀 BlitzWare Koa Example running at http://localhost:${port}
+
+🔗 Routes:
+   • GET /         - Home page
+   • GET /profile  - Protected profile page
+   • GET /login    - Login (automatic)
+   • GET /logout   - Logout (automatic)
+
+📝 Setup:
+   1. Set BLITZWARE_CLIENT_ID and BLITZWARE_CLIENT_SECRET in .env
+   2. Visit http://localhost:${port}/login to authenticate
+  `);
 });
 ```
 
-### Configuration Options
+## 6) How it works
 
-```typescript
-interface AuthConfig {
-  clientId: string; // OAuth client ID
-  clientSecret: string; // OAuth client secret
-  redirectUri: string; // OAuth redirect URI
-  scopes?: string[]; // OAuth scopes (default: ['openid', 'profile', 'email'])
-  baseUrl?: string; // Override auth server URL
-}
-```
+- PKCE + state: The SDK generates a `state` and PKCE verifier/challenge.
+  - `state` defends against CSRF
+  - PKCE protects the code exchange
 
 ### Automatic Routes
 
-When you use `expressAuth()` or `koaAuth()`, the following routes are automatically created:
+When you use `expressAuth()` or `koaAuth()`, the following routes are created automatically:
 
 - `GET /login` - Initiates OAuth login flow
 - `GET /logout` - Logs out user and clears session
 - `GET /callback` - OAuth callback handler
 
-### Session Data
+### Protection
 
-After successful authentication, user data is available in the session:
+- `expressRequiresAuth()` and `koaRequiresAuth()` check for a user stored in the session. They do not perform token introspection by default.
 
-```javascript
-// Express
-req.session.user = {
-  id: "user-id",
-  name: "User Name",
-  email: "user@example.com",
-  roles: ["user", "admin"], // if applicable
-  // ... other user properties
-};
+### Logout (front-channel)
 
-// Koa
-ctx.session.user = {
-  id: "user-id",
-  name: "User Name",
-  email: "user@example.com",
-  roles: ["user", "admin"], // if applicable
-  // ... other user properties
-};
-```
+The SDK performs a front-channel logout: it serves a small HTML page that POSTs to the auth service (so auth-service cookies are sent) and then redirects back to your app.
+
+---
+
+If you need additional features — token introspection on each request, automatic refresh using `session.refreshToken`, or other behavior — open an issue or PR and I can add an opt-in option such as `requiresAuth({ validateToken: true })`.
+
+---
+
+License: MIT
