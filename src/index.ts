@@ -1,5 +1,5 @@
 // Main exports for the BlitzWare Node.js SDK
-export { BlitzWareAuth } from './BlitzWareAuth';
+export { BlitzWareAuth } from "./BlitzWareAuth";
 export {
   BlitzWareAuthError,
   BlitzWareAuthConfig,
@@ -8,17 +8,15 @@ export {
   TokenIntrospectionResponse,
   AuthorizationUrlParams,
   AuthorizationCallbackParams,
-} from './types';
+} from "./types";
 
-// Express.js middleware exports
 export {
-  blitzwareAuth,
-  requireBlitzwareSession,
-  blitzwareLogin,
-  blitzwareCallback,
-  blitzwareLogout,
-  BlitzWareMiddlewareConfig,
-} from './middleware';
+  expressAuth,
+  expressRequiresAuth,
+  koaAuth,
+  koaRequiresAuth,
+  AuthConfig,
+} from "./middleware";
 
 // Default export for convenience
-export { BlitzWareAuth as default } from './BlitzWareAuth';
+export { BlitzWareAuth as default } from "./BlitzWareAuth";

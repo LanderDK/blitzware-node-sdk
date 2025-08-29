@@ -3,8 +3,11 @@ import { BlitzWareUser } from './types';
 declare global {
   namespace Express {
     interface Request {
-      blitzwareUser?: BlitzWareUser;
-      blitzwareAccessToken?: string;
+      blitzware?: {
+        user?: BlitzWareUser;
+        accessToken?: string;
+        isAuthenticated(): boolean;
+      };
     }
   }
 }

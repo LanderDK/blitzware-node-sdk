@@ -1,320 +1,600 @@
 # BlitzWare Node.js SDK
 
-A comprehensive Node.js SDK for integrating with BlitzWare's OAuth 2.0 authentication service. This SDK is specifically designed for **Traditional Web Applications** (confidential clients) that can securely store client secrets.
+A comprehensive OAuth 2.0 SDK for Node.js applications supporting both Express.js and Koa.js frameworks with Auth0-style middleware patterns.
 
-## Features
+## 🚀 Quick Start
 
-- 🔐 **OAuth 2.0 Authorization Code + PKCE** for confidential clients
-- 🛡️ **CSRF Protection** with state parameter validation
-- 🔄 **Token Refresh** support for long-term sessions
-- 📝 **Token Introspection** (RFC 7662) for token validation
-- 🚫 **Token Revocation** for secure logout
-- 🧩 **Express middleware** for login, callback, and logout flows
-- 🎯 **TypeScript Support** with full type definitions
-- 🚀 **Easy Integration** with Express.js and other Node.js frameworks
-- 📚 **Comprehensive Documentation** and examples
+Build a secure server‑rendered web app using BlitzWare OAuth 2.0 Authorization Code flow with automatic route management and session handling.
 
-## Installation
+### Prerequisites
 
+- A BlitzWare OAuth application (Client ID, Client Secret, Redirect URI)
+- Node.js 18+
+- HTTPS in production
+
+### Install Dependencies
+
+**Express.js:**
 ```bash
-npm install blitzware-node-sdk
+npm install blitzware-node-sdk express express-session dotenv
 ```
 
-## Quick Start
-
-### 1. Initialize the SDK
-
-```javascript
-const { BlitzWareAuth } = require('blitzware-node-sdk');
-
-const blitzware = new BlitzWareAuth({
-  clientId: 'your-client-id',
-  clientSecret: 'your-client-secret',
-  redirectUri: 'http://localhost:3000/callback',
-  // Optional: override the default API base URL (useful for self-hosted or staging)
-  // baseUrl: 'https://auth.blitzware.xyz/api/auth'
-});
+**Koa.js:**
+```bash
+npm install blitzware-node-sdk koa koa-router koa-session koa-bodyparser dotenv
 ```
 
-### 2. Start the login flow (middleware)
+### Environment Configuration
 
-Prefer the built-in middleware which handles state + PKCE for you:
+Create a `.env` file:
 
-```javascript
-const { blitzwareLogin } = require('blitzware-node-sdk');
-
-app.get('/login', blitzwareLogin({
-  blitzware,
-  // optional: add query params via additionalParams
-  additionalParams: { scope: 'read write profile email' },
-}));
+```env
+BLITZWARE_DOMAIN=your-domain.blitzware.xyz
+BLITZWARE_CLIENT_ID=your-client-id
+BLITZWARE_CLIENT_SECRET=your-client-secret
+BLITZWARE_REDIRECT_URI=http://localhost:3000/callback
+SESSION_SECRET=replace-with-a-strong-secret
 ```
 
-If you need manual control, you can generate the URL yourself and store the PKCE verifier in session:
+## 🎯 Auth0-Style Middleware (Recommended)
 
-```javascript
-const state = blitzware.generateState();
-const { url: authUrl, codeVerifier } = blitzware.getAuthorizationUrl({
-  state,
-  additionalParams: { scope: 'read write profile email' }
-});
-req.session.oauthState = state;
-req.session.codeVerifier = codeVerifier;
-res.redirect(authUrl);
-```
+The BlitzWare SDK provides Auth0-style middleware that automatically creates authentication routes and handles the complete OAuth flow.
 
-### 3. Handle Authorization Callback
-
-```javascript
-app.get('/callback', async (req, res) => {
-  try {
-    const { code, state } = req.query;
-    const tokenResponse = await blitzware.handleCallback(
-      { code, state },
-      req.session.oauthState,
-      req.session.codeVerifier // if you used manual PKCE above
-    );
-    
-    // Store tokens securely
-    req.session.accessToken = tokenResponse.access_token;
-    req.session.refreshToken = tokenResponse.refresh_token;
-    
-    // Get user information
-    const user = await blitzware.getUserInfo(tokenResponse.access_token);
-    req.session.user = user;
-    
-    res.redirect('/dashboard');
-  } catch (error) {
-    console.error('Authentication failed:', error);
-    res.status(400).send('Authentication failed');
-  }
-});
-```
-
-## API Reference
-
-### Constructor
-
-```typescript
-new BlitzWareAuth(config: BlitzWareAuthConfig)
-```
-
-#### BlitzWareAuthConfig
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `clientId` | string | ✅ | OAuth 2.0 Client ID |
-| `clientSecret` | string | ✅ | OAuth 2.0 Client Secret |
-| `redirectUri` | string | ✅ | Authorized redirect URI |
-| `baseUrl` | string | ❌ | Override API base URL (defaults to BlitzWare cloud) |
-
-### Methods
-
-#### `generateState(): string`
-Generates a cryptographically secure random state parameter for CSRF protection.
-
-```javascript
-const state = blitzware.generateState();
-```
-
-#### `getAuthorizationUrl(params?: AuthorizationUrlParams): { url: string; codeVerifier: string }`
-Generates the authorization URL and a PKCE `codeVerifier` you must retain for the callback.
-
-```javascript
-const { url, codeVerifier } = blitzware.getAuthorizationUrl({
-  state: 'your-state-parameter',
-  additionalParams: { scope: 'read write profile email', prompt: 'consent' }
-});
-```
-
-#### `handleCallback(callbackParams: AuthorizationCallbackParams, expectedState?: string, codeVerifier?: string): Promise<TokenResponse>`
-Handles the authorization callback and exchanges the code for tokens.
-
-```javascript
-const tokenResponse = await blitzware.handleCallback(
-  { code: 'auth-code', state: 'state-value' },
-  'expected-state-value',
-  'pkce-code-verifier' // if you used PKCE
-);
-```
-
-#### `exchangeCodeForTokens(code: string, codeVerifier?: string): Promise<TokenResponse>`
-Exchanges an authorization code for access and refresh tokens. Include `codeVerifier` when using PKCE.
-
-```javascript
-const tokens = await blitzware.exchangeCodeForTokens('authorization-code');
-```
-
-#### `refreshToken(refreshToken: string): Promise<TokenResponse>`
-Refreshes an access token using a refresh token.
-
-```javascript
-const newTokens = await blitzware.refreshToken('refresh-token');
-```
-
-#### `getUserInfo(accessToken: string): Promise<BlitzWareUser>`
-Retrieves user information using an access token.
-
-```javascript
-const user = await blitzware.getUserInfo('access-token');
-```
-
-#### `introspectToken(token: string, tokenTypeHint?: 'access_token' | 'refresh_token'): Promise<TokenIntrospectionResponse>`
-Introspects a token to get its metadata (RFC 7662).
-
-```javascript
-const tokenInfo = await blitzware.introspectToken('token', 'access_token');
-if (tokenInfo.active) {
-  console.log('Token is valid');
-}
-```
-
-#### `revokeToken(token: string, tokenTypeHint?: 'access_token' | 'refresh_token'): Promise<void>`
-Revokes a token (access token or refresh token).
-
-```javascript
-await blitzware.revokeToken('access-token', 'access_token');
-```
-
-#### `validateTokenAndGetUser(accessToken: string): Promise<BlitzWareUser>`
-Validates a token and returns user information if the token is active.
-
-```javascript
-try {
-  const user = await blitzware.validateTokenAndGetUser('access-token');
-  console.log('Token is valid, user:', user);
-} catch (error) {
-  console.log('Token is invalid or expired');
-}
-```
-
-## Express.js Integration Example (with middleware)
+### Express.js Example
 
 ```javascript
 const express = require('express');
 const session = require('express-session');
-const { BlitzWareAuth, blitzwareLogin, blitzwareCallback, blitzwareLogout } = require('blitzware-node-sdk');
+const { expressAuth, expressRequiresAuth } = require('blitzware-node-sdk');
+require('dotenv').config();
 
 const app = express();
-const blitzware = new BlitzWareAuth({
-  clientId: process.env.BLITZWARE_CLIENT_ID,
-  clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
-  redirectUri: 'http://localhost:3000/callback',
-});
 
 // Session middleware
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false } // Set to true in production with HTTPS
+  cookie: { secure: false } // set true with HTTPS in production
 }));
 
-// Routes
-app.get('/login', blitzwareLogin({
-  blitzware,
-  additionalParams: { scope: 'read write profile email' }
+// BlitzWare authentication - automatically creates /login, /logout, /callback routes
+app.use(expressAuth({
+  domain: process.env.BLITZWARE_DOMAIN,
+  clientId: process.env.BLITZWARE_CLIENT_ID,
+  clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
+  redirectUri: process.env.BLITZWARE_REDIRECT_URI,
+  scopes: ['openid', 'profile', 'email']
 }));
 
-app.get('/callback', async (req, res) => {
-  try {
-    const tokenResponse = await blitzware.handleCallback(
-      req.query,
-      req.session.oauthState,
-      req.session.codeVerifier
-    );
-    
-    req.session.accessToken = tokenResponse.access_token;
-    req.session.refreshToken = tokenResponse.refresh_token;
-    
-    const user = await blitzware.getUserInfo(tokenResponse.access_token);
-    req.session.user = user;
-    
-    delete req.session.oauthState;
-    res.redirect('/dashboard');
-  } catch (error) {
-    res.status(400).send(`Authentication failed: ${error.message}`);
+// Public route
+app.get('/', (req, res) => {
+  if (req.session.user) {
+    res.send(`<h1>Welcome, ${req.session.user.name}!</h1><a href="/logout">Logout</a>`);
+  } else {
+    res.send(`<h1>BlitzWare Express</h1><a href="/login">Login</a>`);
   }
 });
 
-app.get('/dashboard', (req, res) => {
-  if (!req.session.user) return res.redirect('/login');
+// Protected route
+app.get('/profile', expressRequiresAuth(), (req, res) => {
   res.json({
-    message: 'Welcome to your dashboard!',
+    message: 'This is a protected route',
     user: req.session.user
   });
 });
 
-app.get('/logout', blitzwareLogout({
-  blitzware,
-  redirectUrl: '/',
-  frontChannel: true // perform browser POST to auth /logout to clear service session
-}));
-
-app.listen(3000);
+app.listen(3000, () => {
+  console.log('Express app running on http://localhost:3000');
+});
 ```
 
-## Error Handling
-
-The SDK throws `BlitzWareAuthError` instances for authentication-related errors:
+### Koa.js Example
 
 ```javascript
-try {
-  const tokens = await blitzware.exchangeCodeForTokens('invalid-code');
-} catch (error) {
-  if (error instanceof BlitzWareAuthError) {
-    console.log('Error code:', error.code);
-    console.log('Error message:', error.message);
-    console.log('Error details:', error.details);
+const Koa = require('koa');
+const session = require('koa-session');
+const { koaAuth, koaRequiresAuth } = require('blitzware-node-sdk');
+require('dotenv').config();
+
+const app = new Koa();
+
+// Session configuration
+app.keys = [process.env.SESSION_SECRET];
+app.use(session({
+  key: 'koa.sess',
+  maxAge: 86400000, // 24 hours
+  httpOnly: true,
+  signed: true
+}, app));
+
+// BlitzWare authentication - automatically handles /login, /logout, /callback routes
+app.use(koaAuth({
+  domain: process.env.BLITZWARE_DOMAIN,
+  clientId: process.env.BLITZWARE_CLIENT_ID,
+  clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
+  redirectUri: process.env.BLITZWARE_REDIRECT_URI,
+  scopes: ['openid', 'profile', 'email']
+}));
+
+// Public route
+app.use(async (ctx, next) => {
+  if (ctx.path === '/') {
+    if (ctx.session.user) {
+      ctx.body = `<h1>Welcome, ${ctx.session.user.name}!</h1><a href="/logout">Logout</a>`;
+    } else {
+      ctx.body = `<h1>BlitzWare Koa</h1><a href="/login">Login</a>`;
+    }
+    return;
   }
+  await next();
+});
+
+// Protected route
+app.use(koaRequiresAuth());
+app.use(async (ctx, next) => {
+  if (ctx.path === '/profile') {
+    ctx.body = {
+      message: 'This is a protected route',
+      user: ctx.session.user
+    };
+    return;
+  }
+  await next();
+});
+
+app.listen(3001, () => {
+  console.log('Koa app running on http://localhost:3001');
+});
+```
+
+## 🏗️ Advanced Examples
+
+The SDK includes comprehensive multi-file examples demonstrating production-ready patterns:
+
+### Run Examples
+
+```bash
+# Simple examples (single file)
+npm run example:express     # Express basic example
+npm run example:koa        # Koa basic example
+
+# Advanced examples (multi-file projects)
+npm run example:express-advanced     # Express with routing, middleware, templates
+npm run example:koa-advanced        # Koa with routing, middleware, templates
+
+# Development mode with auto-restart
+npm run example:express-advanced-dev
+npm run example:koa-advanced-dev
+```
+
+### Advanced Example Features
+
+- **Modular Architecture**: Separate route files and middleware
+- **Role-based Access Control**: Admin and user roles with permission checks
+- **Template Engine**: EJS templates with responsive design
+- **API Endpoints**: RESTful JSON API with authentication
+- **Error Handling**: Comprehensive error middleware
+- **Request Logging**: Detailed request/response logging
+- **Session Security**: Secure server-side session management
+
+## 📚 API Reference
+
+### Authentication Middleware
+
+#### Express
+```javascript
+const { expressAuth, expressRequiresAuth } = require('blitzware-node-sdk');
+
+// Setup authentication (creates /login, /logout, /callback routes)
+app.use(expressAuth(config));
+
+// Protect routes
+app.get('/protected', expressRequiresAuth(), (req, res) => {
+  // req.session.user is available
+});
+```
+
+#### Koa
+```javascript
+const { koaAuth, koaRequiresAuth } = require('blitzware-node-sdk');
+
+// Setup authentication (handles /login, /logout, /callback routes)
+app.use(koaAuth(config));
+
+// Protect routes
+app.use('/protected', koaRequiresAuth(), async (ctx) => {
+  // ctx.session.user is available
+});
+```
+
+### Backward Compatibility
+
+The SDK maintains backward compatibility with legacy aliases:
+
+```javascript
+const { auth, requiresAuth } = require('blitzware-node-sdk');
+// These are aliases for expressAuth and expressRequiresAuth
+```
+
+### Configuration Options
+
+```typescript
+interface AuthConfig {
+  domain: string;           // your-domain.blitzware.xyz
+  clientId: string;         // OAuth client ID
+  clientSecret: string;     // OAuth client secret
+  redirectUri: string;      // OAuth redirect URI
+  scopes?: string[];        // OAuth scopes (default: ['openid', 'profile', 'email'])
+  baseUrl?: string;         // Override auth server URL
 }
 ```
 
-Common error codes:
-- `missing_client_id` - Client ID not provided
-- `missing_client_secret` - Client Secret not provided  
-- `missing_redirect_uri` - Redirect URI not provided
-- `invalid_state` - State parameter mismatch
-- `missing_authorization_code` - Authorization code not found
-- `token_exchange_failed` - Failed to exchange code for tokens
-- `token_refresh_failed` - Failed to refresh token
-- `userinfo_failed` - Failed to get user information
-- `token_inactive` - Token is not active
-- `network_error` - Network connectivity issues
+### Automatic Routes
 
-## TypeScript Support
+When you use `expressAuth()` or `koaAuth()`, the following routes are automatically created:
 
-The SDK includes comprehensive TypeScript definitions:
+- `GET /login` - Initiates OAuth login flow
+- `GET /logout` - Logs out user and clears session  
+- `GET /callback` - OAuth callback handler
 
-```typescript
-import { BlitzWareAuth, BlitzWareAuthConfig, BlitzWareUser, TokenResponse } from 'blitzware-node-sdk';
+### Session Data
 
-const config: BlitzWareAuthConfig = {
-  clientId: 'your-client-id',
-  clientSecret: 'your-client-secret',
-  redirectUri: 'http://localhost:3000/callback',
+After successful authentication, user data is available in the session:
+
+```javascript
+// Express
+req.session.user = {
+  id: "user-id",
+  name: "User Name", 
+  email: "user@example.com",
+  roles: ["user", "admin"], // if applicable
+  // ... other user properties
 };
 
-const blitzware = new BlitzWareAuth(config);
-
-// TypeScript will provide full type checking and IntelliSense
-const user: BlitzWareUser = await blitzware.getUserInfo('access-token');
+// Koa
+ctx.session.user = {
+  id: "user-id",
+  name: "User Name",
+  email: "user@example.com", 
+  roles: ["user", "admin"], // if applicable
+  // ... other user properties
+};
 ```
 
-## Security Best Practices
+```javascript
+const { BlitzWareAuth } = require('blitzware-node-sdk');
 
-1. **Store client secrets securely** - Never expose client secrets in client-side code
-2. **Use HTTPS in production** - Always use secure connections for token exchange
-3. **Validate state parameters** - Always verify state parameters to prevent CSRF attacks
-4. **Store tokens securely** - Use secure session storage or databases for tokens
-5. **Implement token refresh** - Handle token expiration gracefully
-6. **Logout via front-channel** - Use the provided logout middleware to clear the service session
-7. **Use environment variables** - Store sensitive configuration in environment variables
+const blitzware = new BlitzWareAuth({
+  domain: process.env.BLITZWARE_DOMAIN,
+  clientId: process.env.BLITZWARE_CLIENT_ID,
+  clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
+  redirectUri: process.env.BLITZWARE_REDIRECT_URI
+});
 
-## License
+// Generate authorization URL
+const state = blitzware.generateState();
+const { url, codeVerifier } = blitzware.getAuthorizationUrl({
+  state,
+  additionalParams: { scope: 'openid profile email' }
+});
 
-MIT
+// Store state and codeVerifier in session
+req.session.oauthState = state;
+req.session.codeVerifier = codeVerifier;
 
-## Support
+// Redirect to authorization URL
+res.redirect(url);
 
-For questions and support, please visit the [BlitzWare documentation](https://docs.blitzware.xyz) or open an issue on GitHub.
+// Handle callback
+const tokens = await blitzware.handleCallback(
+  req.query, 
+  req.session.oauthState, 
+  req.session.codeVerifier
+);
+
+// Get user info
+const user = await blitzware.getUserInfo(tokens.access_token);
+```
+
+## �️ Security Features
+
+- **PKCE (Proof Key for Code Exchange)**: Automatically implemented for enhanced security
+- **State Parameter**: CSRF protection for OAuth flows
+- **Secure Sessions**: Server-side session management
+- **Token Validation**: Optional token validation on each request
+- **Front-channel Logout**: Proper logout handling to clear auth server sessions
+
+## 🚦 Role-based Access Control
+
+Both frameworks support role-based access control:
+
+### Express Example
+```javascript
+app.get('/admin', expressRequiresAuth(), (req, res, next) => {
+  if (!req.session.user.roles?.includes('admin')) {
+    return res.status(403).send('Admin access required');
+  }
+  res.send('Admin dashboard');
+});
+```
+
+### Koa Example  
+```javascript
+app.use('/admin', koaRequiresAuth(), async (ctx, next) => {
+  if (!ctx.session.user.roles?.includes('admin')) {
+    ctx.status = 403;
+    ctx.body = 'Admin access required';
+    return;
+  }
+  await next();
+});
+```
+
+## 📝 Migration Guide
+
+### From Manual Implementation
+If you're currently using manual OAuth implementation, you can migrate to the Auth0-style middleware:
+
+**Before (Manual):**
+```javascript
+app.get('/login', (req, res) => {
+  // Manual OAuth URL generation
+});
+app.get('/callback', (req, res) => {
+  // Manual token exchange
+});
+```
+
+**After (Middleware):**
+```javascript
+app.use(expressAuth(config)); // Handles everything automatically
+```
+
+### Framework Compatibility
+- **Express**: Use `expressAuth()` and `expressRequiresAuth()`
+- **Koa**: Use `koaAuth()` and `koaRequiresAuth()`
+- **Legacy**: `auth()` and `requiresAuth()` are aliases for Express functions
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+**Missing Dependencies:**
+```bash
+npm install express express-session  # For Express
+npm install koa koa-router koa-session  # For Koa
+```
+
+**Session Issues:**
+- Ensure session middleware is configured before BlitzWare middleware
+- Set appropriate cookie settings for your environment
+- Use a session store like Redis in production
+
+**Authentication Errors:**
+- Verify environment variables are correctly set
+- Check that redirect URI matches your BlitzWare app configuration
+- Ensure your domain is accessible from the BlitzWare auth server
+
+**CORS Issues:**
+- Configure CORS headers if your app and auth server are on different domains
+- Ensure credentials are included in cross-origin requests
+
+## 📊 Production Checklist
+
+- [ ] Use HTTPS in production
+- [ ] Set `secure: true` for session cookies with HTTPS
+- [ ] Use a persistent session store (Redis, MongoDB, etc.)
+- [ ] Configure proper CORS headers if needed
+- [ ] Set up error monitoring and logging
+- [ ] Rotate client secrets regularly
+- [ ] Monitor authentication metrics
+- [ ] Test logout functionality thoroughly
+
+## 🔗 Examples and Resources
+
+### Repository Examples
+- [`examples/express-example.js`](examples/express-example.js) - Basic Express implementation
+- [`examples/koa-example.js`](examples/koa-example.js) - Basic Koa implementation  
+- [`examples/express-advanced/`](examples/express-advanced/) - Advanced Express with routing and templates
+- [`examples/koa-advanced/`](examples/koa-advanced/) - Advanced Koa with routing and templates
+
+### External Resources
+- [BlitzWare Documentation](https://docs.blitzware.xyz)
+- [OAuth 2.0 Security Best Practices](https://tools.ietf.org/html/draft-ietf-oauth-security-topics)
+- [Express.js Documentation](https://expressjs.com/)
+- [Koa.js Documentation](https://koajs.com/)
+
+## 📄 License
+
+MIT License - See [LICENSE](LICENSE) file for details.
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+const Koa = require('koa');
+const Router = require('@koa/router');
+const KoaSession = require('koa-session');
+const session = KoaSession && KoaSession.default ? KoaSession.default : KoaSession;
+const bodyParser = require('koa-bodyparser');
+const { BlitzWareAuth } = require('blitzware-node-sdk');
+
+const app = new Koa();
+const router = new Router();
+const port = process.env.PORT || 3001;
+
+const blitzware = new BlitzWareAuth({
+  clientId: process.env.BLITZWARE_CLIENT_ID,
+  clientSecret: process.env.BLITZWARE_CLIENT_SECRET,
+  redirectUri: process.env.BLITZWARE_REDIRECT_URI,
+  // baseUrl: process.env.BLITZWARE_BASE_URL,
+});
+
+app.keys = [process.env.SESSION_SECRET];
+napp.use(session({ key: 'koa.sess', maxAge: 24*60*60*1000, httpOnly: true, sameSite: 'lax', secure: false }, app));
+app.use(bodyParser());
+
+router.get('/', async (ctx) => {
+  if (ctx.session.user) {
+    ctx.type = 'html';
+    ctx.body = `<h1>Welcome, ${ctx.session.user.username}</h1><a href="/logout">Logout</a>`;
+    return;
+  }
+  ctx.type = 'html';
+  ctx.body = `<h1>BlitzWare Koa Quickstart</h1><a href="/login">Login</a>`;
+});
+
+router.get('/login', async (ctx) => {
+  const state = blitzware.generateState();
+  const { url, codeVerifier } = blitzware.getAuthorizationUrl({
+    state,
+    additionalParams: { scope: 'read write profile email' },
+  });
+  ctx.session.oauthState = state;
+  ctx.session.codeVerifier = codeVerifier;
+  ctx.redirect(url);
+});
+
+router.get('/callback', async (ctx) => {
+  try {
+    const tokens = await blitzware.handleCallback(ctx.query, ctx.session.oauthState, ctx.session.codeVerifier);
+    ctx.session.accessToken = tokens.access_token;
+    if (tokens.refresh_token) ctx.session.refreshToken = tokens.refresh_token;
+    const user = await blitzware.getUserInfo(tokens.access_token);
+    ctx.session.user = user;
+    ctx.session.oauthState = null;
+    ctx.session.codeVerifier = null;
+    ctx.redirect('/');
+  } catch {
+    ctx.redirect('/?error=auth_failed');
+  }
+});
+
+// Protected API (minimal user shape)
+router.get('/api/user', async (ctx) => {
+  if (!ctx.session.accessToken) return (ctx.status = 401, ctx.body = { error: 'Not authenticated' });
+  try {
+    const user = await blitzware.validateTokenAndGetUser(ctx.session.accessToken);
+    ctx.body = { id: user.id, username: user.username };
+  } catch {
+    if (ctx.session.refreshToken) {
+      try {
+        const t = await blitzware.refreshToken(ctx.session.refreshToken);
+        ctx.session.accessToken = t.access_token;
+        if (t.refresh_token) ctx.session.refreshToken = t.refresh_token;
+        const user = await blitzware.getUserInfo(t.access_token);
+        ctx.session.user = user;
+        ctx.body = { id: user.id, username: user.username };
+        return;
+      } catch { /* ignore */ }
+    }
+    ctx.status = 401;
+    ctx.body = { error: 'Authentication failed' };
+  }
+});
+
+// Front-channel logout (clears auth service cookies)
+router.get('/logout', async (ctx) => {
+  ctx.session.accessToken = null;
+  ctx.session.refreshToken = null;
+  ctx.session.user = null;
+
+  const authBase = blitzware.getBaseUrl().replace(/\/$/, '');
+  const logoutUrl = `${authBase}/logout`;
+  const clientId = blitzware.getConfig().clientId;
+  const redirectUrl = '/';
+
+  ctx.type = 'html';
+  ctx.body = `<!doctype html><html><body>
+    <form id="f" method="POST" action="${logoutUrl}">
+      <input type="hidden" name="client_id" value="${clientId}">
+    </form>
+    <script>
+      (function(){try{
+        fetch('${logoutUrl}',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:'${clientId}'})})
+          .catch(function(){})
+          .finally(function(){location.replace('${redirectUrl}');});
+      }catch(e){document.getElementById('f').submit();setTimeout(function(){location.replace('${redirectUrl}');},500);}})();
+    </script>
+  </body></html>`;
+});
+
+app.use(router.routes()).use(router.allowedMethods());
+app.listen(port, () => console.log(`Koa listening at http://localhost:${port}`));
+```
+
+## 5) How it works
+
+- PKCE + state: The SDK generates a state and PKCE verifier/challenge; state defends against CSRF; PKCE protects the code exchange.
+- Callback: `blitzwareCallback` verifies state, exchanges code for tokens, and stores user and tokens in session.
+- Protection:
+  - `requireBlitzwareSession`: checks user presence in session (no per‑request token validation).
+  - `blitzwareAuth`: validates tokens each request and auto‑refreshes when possible.
+- Logout (front-channel): Performs a browser POST to the auth service so its session cookies are sent, then redirects back.
+
+## 6) Configuration reference
+
+SDK constructor:
+
+```ts
+new BlitzWareAuth({
+  clientId: string,
+  clientSecret: string,
+  redirectUri: string,
+  baseUrl?: string, // optional override
+})
+```
+
+Common helpers:
+
+- `blitzwareLogin({ blitzware, additionalParams?, stateProperty?, codeVerifierProperty?, scope? })`
+- `blitzwareCallback({ blitzware, successRedirect?, errorRedirect?, accessTokenProperty?, refreshTokenProperty?, userProperty?, stateProperty?, codeVerifierProperty? })`
+- `blitzwareLogout({ blitzware, redirectUrl?, frontChannel? })`
+- `requireBlitzwareSession({ loginUrl?, userProperty?, attachUser? })`
+- `blitzwareAuth({ blitzware, loginUrl?, autoRefresh?, attachUser? })`
+
+Manual (advanced):
+
+```js
+// Generate URL + PKCE; store state + codeVerifier in session
+const state = blitzware.generateState();
+const { url, codeVerifier } = blitzware.getAuthorizationUrl({
+  state,
+  additionalParams: { scope: 'read write profile email' },
+});
+req.session.oauthState = state;
+req.session.codeVerifier = codeVerifier;
+res.redirect(url);
+
+// In callback
+const tokens = await blitzware.handleCallback(req.query, req.session.oauthState, req.session.codeVerifier);
+```
+
+## 7) Production checklist
+
+- Use HTTPS; set session cookie `secure: true` in production
+- Use a durable session store (e.g., Redis) instead of in‑memory
+- Configure BlitzWare Redirect URI(s) to match deployed URLs
+- If your auth domain is cross‑site, ensure CORS allows credentials and consider top‑level navigation for logout if third‑party cookies are blocked
+- Don’t log tokens or secrets; the SDK middleware is no‑op logging by default. Provide your own logger if needed
+- Rotate client secrets and keep them in environment variables or your secret manager
+
+## 8) Troubleshooting
+
+- `missing_authorization_code` / `invalid_state`
+  - Ensure you store and compare state correctly; don’t lose session between `/login` and `/callback`.
+- `token_exchange_failed` / `token_refresh_failed`
+  - Verify client credentials and `redirectUri` match your BlitzWare app config.
+- “Not authenticated” after logout
+  - Front‑channel logout is required so the auth service receives its session cookies. Use `blitzwareLogout` with `frontChannel: true` (default).
+- CORS/cookies issues
+  - If your app and auth service are on different domains, the auth service must allow credentials and cookies must be configured for cross-site as needed.
+
+## 9) API surface (most used)
+
+- `blitzware.getAuthorizationUrl({ state, additionalParams? })` → `{ url, codeVerifier }`
+- `blitzware.handleCallback(query, expectedState?, codeVerifier?)` → `TokenResponse`
+- `blitzware.refreshToken(refreshToken)` → `TokenResponse`
+- `blitzware.getUserInfo(accessToken)` → `BlitzWareUser`
+- `blitzware.introspectToken(token, 'access_token'|'refresh_token')` → `TokenIntrospectionResponse`
+- `blitzware.revokeToken(token, hint?)` → `void`
+- `blitzware.getBaseUrl()` → `string`
+- `blitzware.getConfig()` → `{ clientId, redirectUri, baseUrl? }`

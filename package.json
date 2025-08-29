@@ -19,9 +19,7 @@
     "test": "jest",
     "prepublishOnly": "npm run build",
     "setup": "node test-setup.js",
-    "example:basic": "node examples/basic-example.js",
     "example:express": "node examples/express-example.js",
-    "example:advanced": "node examples/express-advanced.js",
     "example:koa": "node examples/koa-example.js"
   },
   "dependencies": {
