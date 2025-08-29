@@ -1,6 +1,6 @@
 {
   "name": "blitzware-node-sdk",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "BlitzWare OAuth 2.0 SDK for Node.js Traditional Web Applications",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
